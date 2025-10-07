@@ -1,0 +1,270 @@
+<!-- <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SmartFaceDetectorPro</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Smart Face Detector Dashboard</h1>
+    <div class="controls">
+      <a class="btn" href="/api/export_csv">Export CSV</a>
+      <span class="info">Emotion Model: {{ "Enabled" if emotion_enabled else "Disabled" }}</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="card">
+        <h2>Live Stream</h2>
+        <div class="video-wrap">
+          <img id="videoStream" src="{{ url_for('video') }}" alt="Live stream">
+        </div>
+        <p class="muted">Snapshots are saved automatically when faces are detected.</p>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <h2>Detection History</h2>
+        <table id="logsTable">
+          <thead>
+            <tr><th>Time</th><th>Label</th><th>Image</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Gallery</h2>
+        <div id="gallery" class="gallery"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function fetchLogs(){
+  try {
+    const res = await fetch('/api/logs');
+    const logs = await res.json();
+    const tbody = document.querySelector('#logsTable tbody');
+    tbody.innerHTML = '';
+    const gallery = document.getElementById('gallery');
+    gallery.innerHTML = '';
+    logs.forEach(log => {
+      const tr = document.createElement('tr');
+      const timeTd = document.createElement('td');
+      timeTd.textContent = log.timestamp;
+      const labelTd = document.createElement('td');
+      labelTd.textContent = log.label;
+      const imgTd = document.createElement('td');
+      if (log.filename) {
+        const a = document.createElement('a');
+        a.href = '/static/uploads/' + log.filename;
+        a.target = '_blank';
+        a.textContent = log.filename;
+        imgTd.appendChild(a);
+
+        const thumb = document.createElement('img');
+        thumb.src = '/static/uploads/' + log.filename;
+        thumb.className = 'thumb';
+        gallery.appendChild(thumb);
+      }
+      tr.appendChild(timeTd);
+      tr.appendChild(labelTd);
+      tr.appendChild(imgTd);
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+fetchLogs();
+setInterval(fetchLogs, 3000);
+</script>
+</body>
+</html> -->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SmartFaceDetectorPro</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* small additions so thumbnails and gallery always look OK */
+    .thumb {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      margin: 4px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #222;
+    }
+    .gallery {
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+    .empty-note {
+      color: rgba(255,255,255,0.6);
+      padding: 12px 0;
+    }
+    table th, table td { vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Smart Face Detector Dashboard</h1>
+    <div class="controls">
+      <a class="btn" href="/api/export_csv">Export CSV</a>
+      <span class="info">Emotion Model: {{ "Enabled" if emotion_enabled else "Disabled" }}</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="card">
+        <h2>Live Stream</h2>
+        <div class="video-wrap">
+          <img id="videoStream" src="{{ url_for('video') }}" alt="Live stream">
+        </div>
+        <p class="muted">Snapshots are saved automatically when faces are detected.</p>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <h2>Detection History</h2>
+        <table id="logsTable" class="table">
+          <thead>
+            <tr><th>Time</th><th>Label</th><th>Image</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="historyEmpty" class="empty-note" style="display:none;">No detections yet.</div>
+      </div>
+
+      <div class="card">
+        <h2>Gallery</h2>
+        <div id="gallery" class="gallery"></div>
+        <div id="galleryEmpty" class="empty-note" style="display:none;">No snapshots yet.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* small inline placeholder image (1x1 PNG gray) used when file missing */
+const PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAE0lEQVQImWNgYGD4z8DAwMDAwACDAAE6iN6WAAAAABJRU5ErkJggg==';
+
+async function fetchLogsFrom(endpoint) {
+  try {
+    const res = await fetch(endpoint, {cache: "no-store"});
+    if (!res.ok) throw new Error('status ' + res.status);
+    const data = await res.json();
+    // if backend returns {detections: [...]} unwrap it
+    if (data && data.detections) return data.detections;
+    return data;
+  } catch (e) {
+    // console.warn(`fetch ${endpoint} failed:`, e);
+    return null;
+  }
+}
+
+async function fetchLogs(){
+  // first try /api/logs then /logs
+  let logs = await fetchLogsFrom('/api/logs');
+  if (!logs) logs = await fetchLogsFrom('/logs');
+
+  // if still null/empty, show demo or empty
+  if (!logs || logs.length === 0) {
+    // show empty UI (no sample forced here to avoid changing files)
+    renderEmpty();
+    return;
+  }
+
+  renderLogs(logs);
+}
+
+function renderEmpty(){
+  const tbody = document.querySelector('#logsTable tbody');
+  tbody.innerHTML = '';
+  document.getElementById('historyEmpty').style.display = 'block';
+
+  const gallery = document.getElementById('gallery');
+  gallery.innerHTML = '';
+  document.getElementById('galleryEmpty').style.display = 'block';
+}
+
+function safeImageUrl(filename){
+  if (!filename) return PLACEHOLDER;
+  // ensure no malicious path
+  const name = filename.split('/').pop();
+  return '/static/uploads/' + encodeURIComponent(name);
+}
+
+function renderLogs(logs){
+  const tbody = document.querySelector('#logsTable tbody');
+  tbody.innerHTML = '';
+  const gallery = document.getElementById('gallery');
+  gallery.innerHTML = '';
+
+  logs.forEach(log => {
+    const time = log.timestamp ?? log[1] ?? '';
+    const label = log.label ?? log[2] ?? '';
+    const filename = log.filename ?? log[3] ?? '';
+
+    // table row
+    const tr = document.createElement('tr');
+
+    const tdTime = document.createElement('td');
+    tdTime.textContent = time;
+    tr.appendChild(tdTime);
+
+    const tdLabel = document.createElement('td');
+    tdLabel.textContent = label;
+    tr.appendChild(tdLabel);
+
+    const tdImg = document.createElement('td');
+    if (filename) {
+      const a = document.createElement('a');
+      a.href = safeImageUrl(filename);
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = filename;
+      tdImg.appendChild(a);
+    } else {
+      tdImg.textContent = '-';
+    }
+    tr.appendChild(tdImg);
+
+    tbody.appendChild(tr);
+
+    // gallery (only add if filename)
+    if (filename) {
+      const img = document.createElement('img');
+      img.src = safeImageUrl(filename);
+      img.className = 'thumb';
+      // if image missing show placeholder
+      img.onerror = () => { img.src = PLACEHOLDER; }
+      img.title = label + ' - ' + time;
+      gallery.appendChild(img);
+    }
+  });
+
+  // hide/show empty notes
+  document.getElementById('historyEmpty').style.display = logs.length ? 'none' : 'block';
+  document.getElementById('galleryEmpty').style.display = logs.filter(l => l.filename).length ? 'none' : 'block';
+}
+
+// first run + periodic refresh
+fetchLogs();
+setInterval(fetchLogs, 3000);
+
+// debug assistance: check console for fetch errors if you still see empty UI
+</script>
+</body>
+</html>
