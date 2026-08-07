@@ -73,12 +73,10 @@ Smart-Face-Detector-Pro/
 ```
 
 ### 2️⃣ Create a Virtual Environment
-
 ```bash
 python -m venv venv
 source venv/bin/activate     On macOS/Linux
 venv\Scripts\activate        On Windows
-
 ```
 
 ### 3️⃣ Install Dependencies
