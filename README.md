@@ -67,7 +67,7 @@ Smart-Face-Detector-Pro/
 
 ---
 
-## ⚙️ Installation & Setup
+### ⚙️ Installation & Setup
 
 
 ```
